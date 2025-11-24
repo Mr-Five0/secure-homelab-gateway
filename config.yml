@@ -1,0 +1,48 @@
+http:
+  middlewares:
+    secure-headers:
+      headers:
+        customResponseHeaders:
+          X-Frame-Options: "SAMEORIGIN"       # Prevent frame
+          X-Content-Type-Options: "nosniff"   # Prevent MIME type sniffing
+          X-XSS-Protection: "1; mode=block"   # Enable browser XSS filtering
+          Strict-Transport-Security: "max-age=63072000; includeSubDomains; preload"   # Enforce HTTPS (2 years, including subdomains)
+          Referrer-Policy: "strict-origin-when-cross-origin"                          # Limit Referer header leakage
+          Permissions-Policy: "geolocation=(), microphone=(), camera=()"              # Restrict browser API permissions
+        customRequestHeaders:
+          X-Forwarded-Proto: "https"          # Declare HTTPS protocol to backend
+
+    rate-limit:
+      rateLimit:
+        average: 100            # Allow an average of 100 requests per second
+        burst: 20               # Allow a burst of 20 additional requests in a short time
+        period: 1s              # Statistics period of 1 second
+
+    rate-limit-strict:
+      rateLimit:
+        average: 20             # Strict mode: allow an average of 20 requests per second
+        burst: 5                # Allow a burst of 5 additional requests in a short time
+        period: 1s              # Statistics period of 1 second
+
+    api-ratelimit:
+      rateLimit:
+        average: 20             # API only: allow an average of 20 requests per second
+        burst: 5                # Allow a burst of 5 additional requests in a short time
+        period: 1s              # Statistics period of 1 second
+        sourceCriterion:
+          requestHost: true     # Rate limit by source Host (independent calculation for different API clients)
+
+    api-auth:
+      headers:
+        customRequestHeaders:
+          X-Real-IP: ""         # Clear X-Real-IP (automatically filled by Traefik with the real IP)
+          X-Forwarded-For: ""   # Clear X-Forwarded-For (rewritten by Traefik)
+
+    real-ip-cloudflare:
+      plugin:
+        real-ip:
+          excludednets:
+            - "127.0.0.1/32"    # Exclude localhost
+            - "10.0.0.0/8"      # Exclude private network
+            - "172.16.0.0/12" 
+            - "192.168.0.0/16"

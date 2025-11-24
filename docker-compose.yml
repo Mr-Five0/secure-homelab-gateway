@@ -1,0 +1,216 @@
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    command: tunnel --no-autoupdate run --token ${CF_TUNNEL_TOKEN}
+    restart: unless-stopped
+    networks:
+      - traefik_network
+
+  traefik:
+    image: traefik:latest
+    container_name: traefik
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true # Prevent processes in container from gaining new privileges, enhance security
+    networks:
+      - traefik_network
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro # Synconize container time with host
+      - /var/run/docker.sock:/var/run/docker.sock:ro # Mount Docker socket, allow Traefik to auto-discover container services (read-only)
+      - ${DATA_PATH}/traefik/data/traefik.yml:/traefik.yml:ro
+      - ${DATA_PATH}/traefik/data/config.yml:/config.yml:ro
+      - ${DATA_PATH}/traefik/logs:/var/log/traefik
+    labels:
+      # Enable Traefik's own routing
+      - "traefik.enable=true"
+      # Traefik Dashboard uses HTTPS entrypoint
+      - "traefik.http.routers.traefik.entrypoints=http"
+      # Dashboard access domain
+      - "traefik.http.routers.traefik.rule=Host(`traefik.${DOMAIN_NAME}`)"
+      # Apply Basic Auth middleware to protect Dashboard
+      - "traefik.http.routers.traefik.middlewares=traefik-auth"
+      # Use Traefik's built-in API service
+      - "traefik.http.routers.traefik.service=api@internal"
+      # Set Basic Auth username and password (htpasswd format, configure in .env)
+      - "traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_BASIC_AUTH}"
+
+  # jellyfin:
+  #   image: jellyfin/jellyfin:latest
+  #   container_name: jellyfin
+  #   restart: unless-stopped
+  #   hostname: jellyfin.${DOMAIN_NAME}
+  #   networks:
+  #     - traefik_network
+  #   volumes:
+  #     - ./jellyfin/config:/config
+  #     - ./jellyfin/cache:/cache
+  #    # - /path/to/media:/media:ro
+  #   environment:
+  #     - PUID=1000
+  #     - PGID=1000
+  #    # - TZ=your_timezone
+  #   labels:
+  #     - "traefik.enable=true"
+  #     - "traefik.http.routers.jellyfin.entrypoints=http"
+  #     - "traefik.http.routers.jellyfin.rule=Host(`jellyfin.${DOMAIN_NAME}`)"
+  #     - "traefik.http.routers.jellyfin.middlewares=jellyfin-mw"
+  #     - "traefik.http.services.jellyfin.loadbalancer.server.port=8096"
+  #     # middleware: rate limit first，then secure headers
+  #     - "traefik.http.middlewares.jellyfin-mw.chain.middlewares=rate-limit@file,secure-headers@file"
+
+  # gitlab:
+  #   image: gitlab/gitlab-ce:latest
+  #   container_name: gitlab
+  #   restart: unless-stopped
+  #   hostname: gitlab.${DOMAIN_NAME}
+  #   networks:
+  #     - traefik_network
+  #   environment:
+  #     GITLAB_OMNIBUS_CONFIG: |
+  #       external_url 'https://gitlab.${DOMAIN_NAME}'
+  #       nginx['listen_port'] = 8888 # Change port to 8888 
+  #       nginx['listen_https'] = false # Disable GitLab's internal HTTPS
+  #       gitlab_rails['gitlab_shell_ssh_port'] = 2222 # SSH port change to 2222
+  #   ports:
+  #     - "2222:22" # Map SSH port to host 2222
+  #     - "8888:8888"
+  #   volumes:
+  #     - ${DATA_PATH}/gitlab/config:/etc/gitlab
+  #     - ${DATA_PATH}/gitlab/logs:/var/log/gitlab
+  #     - ${DATA_PATH}/gitlab/data:/var/opt/gitlab
+  #   shm_size: '256m' # Change shared memory size, GitLab requires larger shm
+  #   labels:
+  #     - "traefik.enable=true"
+  #     - "traefik.http.routers.gitlab.entrypoints=http"
+  #     - "traefik.http.routers.gitlab.rule=Host(`gitlab.${DOMAIN_NAME}`)"
+  #     - "traefik.http.routers.gitlab.middlewares=gitlab-mw"
+  #     - "traefik.http.services.gitlab.loadbalancer.server.port=8888"
+  #     - "traefik.http.middlewares.gitlab-mw.chain.middlewares=rate-limit-strict@file,secure-headers@file"
+
+  # vaultwarden:
+  #   image: vaultwarden/server:latest
+  #   container_name: vaultwarden
+  #   restart: unless-stopped
+  #   hostname: vaultwarden.${DOMAIN_NAME}
+  #   networks:
+  #     - traefik_network
+  #   volumes:
+  #     - ${DATA_PATH}/vw-data/:/data
+  #   environment:
+  #     WEBSOCKET_ENABLED: "true" # enable WebSocket support
+  #     ROCKET_PORT: "8889"
+  #   labels:
+  #     - "traefik.enable=true"
+  #     - "traefik.http.routers.vaultwarden.entrypoints=http"
+  #     - "traefik.http.routers.vaultwarden.rule=Host(`vaultwarden.${DOMAIN_NAME}`)"
+  #     - "traefik.http.routers.vaultwarden.middlewares=vaultwarden-mw"
+  #     - "traefik.http.services.vaultwarden.loadbalancer.server.port=8889"
+  #     - "traefik.http.middlewares.vaultwarden-mw.chain.middlewares=rate-limit@file,secure-headers@file"
+
+  # nextcloud:
+  #   image: nextcloud:latest
+  #   container_name: nextcloud
+  #   restart: unless-stopped
+  #   hostname: nextcloud.${DOMAIN_NAME}
+  #   networks:
+  #     - traefik_network
+  #   volumes:
+  #     - ${DATA_PATH}/nextcloud/html:/var/www/html
+  #     - ${DATA_PATH}/nextcloud/config:/var/www/html/config
+  #     - ${DATA_PATH}/nextcloud/apps:/var/www/html/custom_apps
+  #     - ${DATA_PATH}/nextcloud/themes:/var/www/html/themes
+  #     - ${DATA_PATH}/nextcloud/nextcloud/data:/var/www/html/data
+  #   ports:
+  #     - "7878:80"
+  #   labels:
+  #     - "traefik.enable=true"
+  #     - "traefik.http.routers.nextcloud.entrypoints=http"
+  #     - "traefik.http.routers.nextcloud.rule=Host(`nextcloud.${DOMAIN_NAME}`)"
+  #     - "traefik.http.routers.nextcloud.middlewares=nextcloud-mw"
+  #     - "traefik.http.services.nextcloud.loadbalancer.server.port=80"
+  #     - "traefik.http.middlewares.nextcloud-mw.chain.middlewares=rate-limit@file,secure-headers@file"
+
+  # homepage:
+  #   image: ghcr.io/gethomepage/homepage:latest
+  #   container_name: homepage
+  #   restart: unless-stopped
+  #   hostname: homepage.${DOMAIN_NAME}
+  #   networks:
+  #     - traefik_network
+  #   environment:
+  #     - HOMEPAGE_ALLOWED_HOSTS=homepage.${DOMAIN_NAME},10.64.64.18:3333
+  #     - PUID=1000
+  #     - PGID=1000
+  #   ports:
+  #     - 3000:3000
+  #   volumes:
+  #     - ${DATA_PATH}/homepage/config:/app/config 
+  #     - /var/run/docker.sock:/var/run/docker.sock:ro # optional, for docker integrations
+  #     # - /path/to/disk1:/path/in/container:ro # optional, for disk shortcuts
+  #   labels:
+  #     - "traefik.enable=true"
+  #     - "traefik.http.routers.homepage.entrypoints=http"
+  #     - "traefik.http.routers.homepage.rule=Host(`homepage.${DOMAIN_NAME}`)"
+  #     - "traefik.http.routers.homepage.middlewares=homepage-mw"
+  #     - "traefik.http.services.homepage.loadbalancer.server.port=3000"
+  #     - "traefik.http.middlewares.homepage-mw.chain.middlewares=rate-limit@file,secure-headers@file"
+
+  # trilium:
+  #   image: triliumnext/trilium:latest
+  #   container_name: trilium
+  #   restart: unless-stopped
+  #   hostname: trilium.${DOMAIN_NAME}
+  #   networks:
+  #     - traefik_network
+  #   environment:
+  #     - TRILIUM_DATA_DIR=/home/node/trilium-data
+  #     - TRUST_PROXY=true
+  #     - PUID=1000
+  #     - PGID=1000
+  #   ports:
+  #     - '8080:8080'
+  #   volumes:
+  #     # Unless TRILIUM_DATA_DIR is set, the data will be stored in the "trilium-data" directory in the home directory.
+  #     # This can also be changed with by replacing the line below with `- /path/of/your/choice:/home/node/trilium-data
+  #     - ${DATA_PATH}/trilium-data:/home/node/trilium-data
+  #     - /etc/timezone:/etc/timezone:ro
+  #     - /etc/localtime:/etc/localtime:ro
+  #   labels:
+  #     - "traefik.enable=true"
+  #     - "traefik.http.routers.trilium.entrypoints=http"
+  #     - "traefik.http.routers.trilium.rule=Host(`trilium.${DOMAIN_NAME}`)"
+  #     - "traefik.http.routers.trilium.middlewares=trilium-mw"
+  #     - "traefik.http.services.trilium.loadbalancer.server.port=8080"
+  #     - "traefik.http.middlewares.trilium-mw.chain.middlewares=rate-limit@file,secure-headers@file"
+  
+  # wud:
+  #   image: getwud/wud:latest
+  #   container_name: wud
+  #   restart: unless-stopped
+  #   hostname: wud.${DOMAIN_NAME}
+  #   networks:
+  #     - traefik_network
+  #   environment:
+  #     - PUID=1000
+  #     - PGID=1000
+  #    # - TZ=your_timezone
+  #   ports:
+  #     - 3030:3000
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock:ro
+  #   labels:
+  #     - "traefik.enable=true"
+  #     - "traefik.http.routers.wud.entrypoints=http"
+  #     - "traefik.http.routers.wud.rule=Host(`wud.${DOMAIN_NAME}`)"
+  #     - "traefik.http.routers.wud.middlewares=wud-mw"
+  #     - "traefik.http.services.wud.loadbalancer.server.port=3000"
+  #     - "traefik.http.middlewares.wud-mw.chain.middlewares=rate-limit@file,secure-headers@file"
+
+networks:
+  traefik_network:
+    name: traefik_network
+    driver: bridge
